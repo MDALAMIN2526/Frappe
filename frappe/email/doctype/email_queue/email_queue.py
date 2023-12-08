@@ -391,7 +391,8 @@ class SendMailContext:
 
 @frappe.whitelist()
 def bulk_retry(queues):
-	frappe.only_for("System Manager")
+	if not frappe.has_permission("Email Queue", throw=True):
+		return
 
 	if isinstance(queues, str):
 		queues = json.loads(queues)
@@ -399,11 +400,8 @@ def bulk_retry(queues):
 	if not queues:
 		return
 
-	frappe.msgprint(
-		_("Updating Email Queue Statuses. The emails will be picked up in the next scheduled run."),
-		_("Processing..."),
-	)
-
+	# NOTE: this will probably work fine with the way current listview works (showing and selecting 20-20 records)
+	# but, ideally this should be enqueued
 	email_queue = frappe.qb.DocType("Email Queue")
 	frappe.qb.update(email_queue).set(email_queue.status, "Not Sent").set(
 		email_queue.modified, now()
