@@ -206,12 +206,6 @@ class EmailQueue(Document):
 			.where(email_recipient.modified < (Now() - Interval(days=days)))
 		).run()
 
-	@frappe.whitelist()
-	def retry_sending(self):
-		if self.status == "Error":
-			self.status = "Not Sent"
-			self.save(ignore_permissions=True)
-
 
 @task(queue="short")
 @deprecated
@@ -390,7 +384,7 @@ class SendMailContext:
 
 
 @frappe.whitelist()
-def bulk_retry(queues):
+def retry_sending(queues: str | list[str]):
 	if not frappe.has_permission("Email Queue", throw=True):
 		return
 
