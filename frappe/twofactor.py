@@ -96,16 +96,17 @@ def cache_2fa_data(user, token, otp_secret, tmp_id):
 	pwd = frappe.form_dict.get("pwd")
 	verification_method = get_verification_method()
 
+	pipeline = frappe.cache.pipeline()
+
 	# set increased expiry time for SMS and Email
 	if verification_method in ["SMS", "Email"]:
 		expiry_time = frappe.flags.token_expiry or 300
-		frappe.cache.set(tmp_id + "_token", token)
-		frappe.cache.expire(tmp_id + "_token", expiry_time)
+		pipeline.set(tmp_id + "_token", token, expiry_time)
 	else:
 		expiry_time = frappe.flags.otp_expiry or 180
 	for k, v in {"_usr": user, "_pwd": pwd, "_otp_secret": otp_secret}.items():
-		frappe.cache.set(f"{tmp_id}{k}", v)
-		frappe.cache.expire(f"{tmp_id}{k}", expiry_time)
+		pipeline.set(f"{tmp_id}{k}", v, expiry_time)
+	pipeline.execute()
 
 
 def two_factor_is_enabled_for_(user):
@@ -211,8 +212,7 @@ def process_2fa_for_sms(user, token, otp_secret):
 	status = send_token_via_sms(otp_secret, token=token, phone_no=phone)
 	return {
 		"token_delivery": status,
-		"prompt": status
-		and "Enter verification code sent to {}".format(phone[:4] + "******" + phone[-3:]),
+		"prompt": status and "Enter verification code sent to {}".format(phone[:4] + "******" + phone[-3:]),
 		"method": "SMS",
 		"setup": status,
 	}
@@ -220,7 +220,6 @@ def process_2fa_for_sms(user, token, otp_secret):
 
 def process_2fa_for_otp_app(user, otp_secret, otp_issuer):
 	"""Process OTP App method for 2fa."""
-	totp_uri = pyotp.TOTP(otp_secret).provisioning_uri(user, issuer_name=otp_issuer)
 	if get_default(user + "_otplogin"):
 		otp_setup_completed = True
 	else:
@@ -247,9 +246,7 @@ def process_2fa_for_email(user, token, otp_secret, otp_issuer, method="Email"):
 	else:
 		"""Sending email verification"""
 		prompt = _("Verification code has been sent to your registered email address.")
-	status = send_token_via_email(
-		user, token, otp_secret, otp_issuer, subject=subject, message=message
-	)
+	status = send_token_via_email(user, token, otp_secret, otp_issuer, subject=subject, message=message)
 	return {
 		"token_delivery": status,
 		"prompt": status and prompt,
@@ -397,9 +394,7 @@ def create_barcode_folder():
 	folder = frappe.db.exists("File", {"file_name": folder_name})
 	if folder:
 		return folder
-	folder = frappe.get_doc(
-		{"doctype": "File", "file_name": folder_name, "is_folder": 1, "folder": "Home"}
-	)
+	folder = frappe.get_doc({"doctype": "File", "file_name": folder_name, "is_folder": 1, "folder": "Home"})
 	folder.insert(ignore_permissions=True)
 	return folder.name
 

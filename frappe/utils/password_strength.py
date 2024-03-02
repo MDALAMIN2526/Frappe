@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 	from zxcvbn.matching import _Match
 
 
-def test_password_strength(password: str, user_inputs: "Iterable[object]" = None) -> "_Result":
+def test_password_strength(password: str, user_inputs: "Iterable[object] | None" = None) -> "_Result":
 	"""Wrapper around zxcvbn.password_strength"""
 	if len(password) > 128:
 		# zxcvbn takes forever when checking long, random passwords.
@@ -146,9 +146,7 @@ def get_match_feedback(match: "_Match", is_sole_match: bool) -> "PasswordStrengt
 		return pattern_fn()
 
 
-def get_dictionary_match_feedback(
-	match: "_Match", is_sole_match: bool
-) -> "PasswordStrengthFeedback":
+def get_dictionary_match_feedback(match: "_Match", is_sole_match: bool) -> "PasswordStrengthFeedback":
 	"""Return feedback for a match that is found in a dictionary."""
 	warning = ""
 	suggestions = []
