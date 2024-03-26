@@ -653,11 +653,9 @@ frappe.views.ListView = class ListView extends frappe.views.BaseList {
 
 		const subject_field = this.columns[0].df;
 		let subject_html = `
-			<input class="level-item list-check-all" type="checkbox"
-				title="${__("Select All")}">
 			<span class="level-item" data-sort-by="${subject_field.fieldname}"
 				title="${__("Click to sort by {0}", [subject_field.label])}">
-				${__(subject_field.label)}
+				<span class="hidden-sm">${__(subject_field.label)}</span><span class="hidden-lg">Details</span>
 			</span>
 		`;
 		const $columns = this.columns
@@ -700,6 +698,10 @@ frappe.views.ListView = class ListView extends frappe.views.BaseList {
 	get_header_html_skeleton(left = "", right = "") {
 		return `
 			<header class="level list-row-head text-muted">
+				<span class="level-item select-like">
+					<input class="level-item list-check-all" type="checkbox"
+					title="${__("Select All")}">
+				</span>
 				<div class="level-left list-header-subject">
 					${left}
 				</div>
@@ -718,7 +720,10 @@ frappe.views.ListView = class ListView extends frappe.views.BaseList {
 	}
 
 	get_left_html(doc) {
-		return this.columns.map((col) => this.get_column_html(col, doc)).join("");
+		const columns_for_mobile = this.columns.filter((col) => col.type === "Field");
+		return this.columns
+			.map((col) => this.get_column_html(col, doc, columns_for_mobile))
+			.join("");
 	}
 
 	get_right_html(doc) {
@@ -726,13 +731,18 @@ frappe.views.ListView = class ListView extends frappe.views.BaseList {
 	}
 
 	get_list_row_html(doc) {
-		return this.get_list_row_html_skeleton(this.get_left_html(doc), this.get_right_html(doc));
+		return this.get_list_row_html_skeleton(
+			this.get_checkbox_html(doc),
+			this.get_left_html(doc),
+			this.get_right_html(doc)
+		);
 	}
 
-	get_list_row_html_skeleton(left = "", right = "") {
+	get_list_row_html_skeleton(checkbox = "", left = "", right = "") {
 		return `
 			<div class="list-row-container" tabindex="1">
 				<div class="level list-row">
+					${checkbox}
 					<div class="level-left ellipsis">
 						${left}
 					</div>
@@ -745,7 +755,21 @@ frappe.views.ListView = class ListView extends frappe.views.BaseList {
 		`;
 	}
 
-	get_column_html(col, doc) {
+	get_checkbox_html(doc) {
+		const div = document.createElement("div");
+		div.innerHTML = `
+			<span class="level-item select-like">
+				<input class="list-row-checkbox" class="margin: 0 4px;" type="checkbox">
+			</span>
+		`;
+		const checkbox = div.querySelector(".list-row-checkbox");
+		checkbox.dataset.doctype = this.doctype;
+		checkbox.dataset.name = doc.name;
+
+		return div.innerHTML;
+	}
+	get_column_html(col, doc, columns_for_mobile) {
+		const mobile_index = columns_for_mobile.indexOf(col);
 		if (col.type === "Status" || col.df?.options == "Workflow State") {
 			let show_workflow_state = col.df?.options == "Workflow State";
 			return `
@@ -854,12 +878,19 @@ frappe.views.ListView = class ListView extends frappe.views.BaseList {
 			return `<span class="ellipsis"
 				title="${__(label)}: ${frappe.utils.escape_html(_value)}">
 				${html}
+				${
+					col.type !== "Subject" &&
+					0 <= mobile_index <= 2 &&
+					columns_for_mobile.length - 1 != mobile_index
+						? "<span class='mobile-seprator'>&bull;</span>"
+						: ""
+				}
 			</span>`;
 		};
 
 		const class_map = {
 			Subject: "list-subject level",
-			Field: "hidden-xs",
+			Field: mobile_index > 2 ? "hidden-xs" : "",
 		};
 		const css_class = [
 			"list-row-col ellipsis",
@@ -955,7 +986,7 @@ frappe.views.ListView = class ListView extends frappe.views.BaseList {
 					${this.get_like_html(doc)}
 				</span>
 			</div>
-			<div class="level-item visible-xs text-right">
+			<div class="level-item hidden-lg text-right">
 				${this.get_indicator_html(doc)}
 			</div>
 		`;
@@ -1047,18 +1078,12 @@ frappe.views.ListView = class ListView extends frappe.views.BaseList {
 		const seen = this.get_seen_class(doc);
 
 		const div = document.createElement("div");
+
 		div.innerHTML = `
-			<span class="level-item select-like">
-				<input class="list-row-checkbox" type="checkbox">
-			</span>
 			<span class="level-item ${seen} ellipsis">
 				<a class="ellipsis"></a>
 			</span>
 		`;
-
-		const checkbox = div.querySelector(".list-row-checkbox");
-		checkbox.dataset.doctype = this.doctype;
-		checkbox.dataset.name = doc.name;
 
 		const link = div.querySelector(".level-item a");
 		link.dataset.doctype = this.doctype;
@@ -1331,7 +1356,10 @@ frappe.views.ListView = class ListView extends frappe.views.BaseList {
 	}
 
 	check_row_on_drag(event, check = true) {
-		$(event.target).find(".list-row-checkbox").prop("checked", check);
+		$(event.target)
+			.closest(".level.list-row")
+			.find(".list-row-checkbox")
+			.prop("checked", check);
 		this.on_row_checked();
 	}
 
@@ -1349,12 +1377,12 @@ frappe.views.ListView = class ListView extends frappe.views.BaseList {
 		this.$result.on("change", "input[type=checkbox]", (e) => {
 			const $target = $(e.currentTarget);
 
-			if ($target.is(".list-header-subject .list-check-all")) {
+			if ($target.is(".select-like .list-check-all")) {
 				const $check = this.$result.find(".checkbox-actions .list-check-all");
 				$check.prop("checked", $target.prop("checked"));
 				$check.trigger("change");
 			} else if ($target.is(".checkbox-actions .list-check-all")) {
-				const $check = this.$result.find(".list-header-subject .list-check-all");
+				const $check = this.$result.find(".select-like .list-check-all");
 				$check.prop("checked", $target.prop("checked"));
 
 				this.$result.find(".list-row-checkbox").prop("checked", $target.prop("checked"));
@@ -1586,21 +1614,25 @@ frappe.views.ListView = class ListView extends frappe.views.BaseList {
 	on_row_checked() {
 		this.$list_head_subject =
 			this.$list_head_subject || this.$result.find("header .list-header-subject");
+		this.$checkbox_container =
+			this.$checkbox_container || this.$result.find("header .select-like");
 		this.$checkbox_actions =
 			this.$checkbox_actions || this.$result.find("header .checkbox-actions");
 
 		this.$checks = this.$result.find(".list-row-checkbox:checked");
 
+		this.$checkbox_container.toggle(this.$checks.length === 0);
 		this.$list_head_subject.toggle(this.$checks.length === 0);
 		this.$checkbox_actions.toggle(this.$checks.length > 0);
 
 		if (this.$checks.length === 0) {
-			this.$list_head_subject.find(".list-check-all").prop("checked", false);
+			this.$checkbox_container.find(".list-check-all").prop("checked", false);
 		} else {
 			this.$checkbox_actions
 				.find(".list-header-meta")
 				.html(__("{0} items selected", [this.$checks.length]));
 			this.$checkbox_actions.show();
+			this.$checkbox_container.hide();
 			this.$list_head_subject.hide();
 		}
 		this.update_checkbox();
