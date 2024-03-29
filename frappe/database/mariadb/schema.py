@@ -33,7 +33,10 @@ class MariaDBTable(DBTable):
 			]
 		else:
 			# parent types
-			additional_definitions.append("index modified(modified)")
+			additional_definitions.append("index creation(creation)")
+			if self.meta.sort_field == "modified":
+				# Support old doctype default by indexing it, also 2nd popular choice.
+				additional_definitions.append("index modified(modified)")
 
 		# creating sequence(s)
 		if not self.meta.issingle and self.meta.autoname == "autoincrement":
@@ -61,7 +64,7 @@ class MariaDBTable(DBTable):
 			CHARACTER SET=utf8mb4
 			COLLATE=utf8mb4_unicode_ci"""
 
-		frappe.db.sql(query)
+		frappe.db.sql_ddl(query)
 
 	def alter(self):
 		for col in self.columns.values():
@@ -81,6 +84,12 @@ class MariaDBTable(DBTable):
 			for col in self.add_index
 			if not frappe.db.get_column_index(self.table_name, col.fieldname, unique=False)
 		]
+
+		if self.meta.sort_field == "modified" and not frappe.db.get_column_index(
+			self.table_name, "modified", unique=False
+		):
+			add_index_query.append("ADD INDEX `modified`(`modified`)")
+
 		drop_index_query = []
 
 		for col in {*self.drop_index, *self.drop_unique}:
