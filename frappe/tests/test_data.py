@@ -21,7 +21,7 @@ test_time_formats = {
 	"%H:%M:%S": test_date_obj.strftime("%H:%M:%S"),
 	"%H:%M": test_date_obj.strftime("%H:%M"),
 }
-import logging
+
 
 class TestData(FrappeTestCase):
 	"""Tests date, time and datetime formatters and some associated
@@ -33,5 +33,4 @@ class TestData(FrappeTestCase):
 		# Test formatdate with various default date formats set
 		for valid_format, date_str in test_date_formats.items():
 			frappe.db.set_default("date_format", valid_format)
-			logging.error(f"date_format: {date_str} {valid_format}")
 			self.assertEqual(guess_date_format(date_str), valid_format)
