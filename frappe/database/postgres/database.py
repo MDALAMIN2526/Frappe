@@ -13,6 +13,7 @@ from psycopg2.errorcodes import (
 	UNIQUE_VIOLATION,
 )
 from psycopg2.errors import (
+	InterfaceError,
 	LockNotAvailable,
 	ReadOnlySqlTransaction,
 	SequenceGeneratorLimitExceeded,
@@ -116,6 +117,10 @@ class PostgresExceptionUtil:
 	def is_db_table_size_limit(e) -> bool:
 		return False
 
+	@staticmethod
+	def is_interface_error(e):
+		return isinstance(e, InterfaceError)
+
 
 class PostgresDatabase(PostgresExceptionUtil, Database):
 	REGEX_CHARACTER = "~"
@@ -125,7 +130,7 @@ class PostgresDatabase(PostgresExceptionUtil, Database):
 		self.db_type = "postgres"
 		self.type_map = {
 			"Currency": ("decimal", "21,9"),
-			"Int": ("bigint", None),
+			"Int": ("int", None),
 			"Long Int": ("bigint", None),
 			"Float": ("decimal", "21,9"),
 			"Percent": ("decimal", "21,9"),
@@ -168,10 +173,12 @@ class PostgresDatabase(PostgresExceptionUtil, Database):
 		conn_settings = {
 			"dbname": self.cur_db_name,
 			"user": self.user,
-			"host": self.host,
-			"password": self.password,
+			# libpg defaults to default socket if not specified
+			"host": self.host or self.socket,
 		}
-		if self.port:
+		if self.password:
+			conn_settings["password"] = self.password
+		if not self.socket and self.port:
 			conn_settings["port"] = self.port
 
 		conn = psycopg2.connect(**conn_settings)

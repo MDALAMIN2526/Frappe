@@ -75,6 +75,7 @@ class Database:
 
 	def __init__(
 		self,
+		socket=None,
 		host=None,
 		user=None,
 		password=None,
@@ -82,6 +83,7 @@ class Database:
 		cur_db_name=None,
 	):
 		self.setup_type_map()
+		self.socket = socket
 		self.host = host
 		self.port = port
 		self.user = user
@@ -1243,7 +1245,7 @@ class Database:
 
 	@staticmethod
 	def is_column_missing(e):
-		return frappe.db.is_missing_column(e)
+		raise NotImplementedError
 
 	def get_descendants(self, doctype, name):
 		"""Return descendants of the group node in tree"""
