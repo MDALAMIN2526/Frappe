@@ -55,6 +55,28 @@ class TestDashboardChart(FrappeTestCase):
 			self.assertEqual(result.get("labels")[idx], get_period(month))
 			cur_date += relativedelta(months=1)
 
+	def test_dashboard_chart_group_by(self):
+		from frappe.desk.doctype.dashboard_chart.dashboard_chart import has_permission
+
+		if frappe.db.exists("Dashboard Chart", "Test Dashboard Chart GroupBy"):
+			frappe.delete_doc("Dashboard Chart", "Test Dashboard Chart GroupBy")
+
+		doc = frappe.get_doc(
+			doctype="Dashboard Chart",
+			chart_name="Test Dashboard Chart GroupBy",
+			chart_type="Group By",
+			document_type="DocField",
+			parent_document_type="DocType",
+			group_by_type="Sum",
+			group_by_based_on="fieldtype",
+			aggregate_function_based_on="columns",
+			filters_json="{}",
+		).insert()
+
+		result = get(chart_name="Test Dashboard Chart GroupBy", refresh=1)
+		self.assertTrue(result.get("datasets")[0].get("values"))
+		self.assertTrue(has_permission(doc, "report", "Administrator"))
+
 	def test_empty_dashboard_chart(self):
 		if frappe.db.exists("Dashboard Chart", "Test Empty Dashboard Chart"):
 			frappe.delete_doc("Dashboard Chart", "Test Empty Dashboard Chart")

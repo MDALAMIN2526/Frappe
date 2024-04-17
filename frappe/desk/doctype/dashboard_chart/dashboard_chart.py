@@ -13,7 +13,7 @@ from frappe.model.naming import append_number_if_name_exists
 from frappe.modules.export_file import export_to_files
 from frappe.utils import cint, get_datetime, getdate, has_common, now_datetime, nowdate
 from frappe.utils.dashboard import cache_source
-from frappe.utils.data import format_date
+from frappe.utils.data import cstr, format_date
 from frappe.utils.dateutils import (
 	get_dates_from_timegrain,
 	get_from_date_from_timespan,
@@ -22,68 +22,88 @@ from frappe.utils.dateutils import (
 )
 
 
+def get_doctypes_with_report(user):
+	perms = frappe.permissions.get_valid_perms(user=user)
+	return list(set(cstr(p.parent) for p in perms if p.report))
+
+
 def get_permission_query_conditions(user):
+	func_key = "frappe::DashboardChart::get_permission_query_conditions"
 	if not user:
 		user = frappe.session.user
 
-	if user == "Administrator":
-		return
-
-	roles = frappe.get_roles(user)
-	if "System Manager" in roles:
-		return None
+	if frappe.cache.exists(func_key, user=user):
+		return frappe.cache.get_value(func_key, user=user)
 
 	doctype_condition = False
 	report_condition = False
 	module_condition = False
+	modules = ""
 
-	allowed_doctypes = [frappe.db.escape(doctype) for doctype in frappe.permissions.get_doctypes_with_read()]
-	allowed_reports = [frappe.db.escape(report) for report in get_allowed_report_names()]
+	allowed_doctypes = [frappe.db.escape(doctype) for doctype in get_doctypes_with_report(user)]
+	allowed_reports = [frappe.db.escape(report) for report in get_allowed_report_names(cache=True)]
 	allowed_modules = [
-		frappe.db.escape(module.get("module_name")) for module in get_modules_from_all_apps_for_user()
+		frappe.db.escape(module.get("module_name"))
+		for module in get_modules_from_all_apps_for_user(user=user)
 	]
 
 	if allowed_doctypes:
-		doctype_condition = "`tabDashboard Chart`.`document_type` in ({allowed_doctypes})".format(
-			allowed_doctypes=",".join(allowed_doctypes)
-		)
+		doctypes = ",".join(allowed_doctypes)
+		doctype_condition = f"""(`tabDashboard Chart`.`document_type` IN ({doctypes}) OR
+					`tabDashboard Chart`.`parent_document_type` IN ({doctypes}))"""
 	if allowed_reports:
-		report_condition = "`tabDashboard Chart`.`report_name` in ({allowed_reports})".format(
-			allowed_reports=",".join(allowed_reports)
-		)
+		reports = ",".join(allowed_reports)
+		report_condition = f"`tabDashboard Chart`.`report_name` IN ({reports})"
 	if allowed_modules:
-		module_condition = """`tabDashboard Chart`.`module` in ({allowed_modules})
-			or `tabDashboard Chart`.`module` is NULL""".format(allowed_modules=",".join(allowed_modules))
+		modules = ",".join(allowed_modules)
+		module_condition = f"""`tabDashboard Chart`.`module` IN ({modules})
+			OR `tabDashboard Chart`.`module` IS NULL"""
 
-	return f"""
-		((`tabDashboard Chart`.`chart_type` in ('Count', 'Sum', 'Average')
-		and {doctype_condition})
-		or
-		(`tabDashboard Chart`.`chart_type` = 'Report'
-		and {report_condition}))
-		and
+	conditions = f"""
+		(
+			(`tabDashboard Chart`.`chart_type` = 'Report' AND {report_condition})
+			OR
+			(`tabDashboard Chart`.`chart_type` = 'Custom' AND
+				((SELECT `tabDashboard Chart Source`.`module` FROM `tabDashboard Chart Source`
+				WHERE `tabDashboard Chart Source`.`name`=`tabDashboard Chart`.`source`) IN
+				({modules}))
+			)
+			OR
+			(`tabDashboard Chart`.`chart_type` NOT IN ('Report', 'Custom') AND
+				{doctype_condition})
+		)
+		AND
 		({module_condition})
 	"""
+	frappe.cache.set_value(func_key, conditions, expires_in_sec=3600, user=user)
+	return conditions
 
 
 def has_permission(doc, ptype, user):
-	roles = frappe.get_roles(user)
-	if "System Manager" in roles:
-		return True
+	func_key = f"frappe::DashboardChart::has_permission::{doc.name}"
+	if frappe.cache.exists(func_key, user=user):
+		return frappe.cache.get_value(func_key, user=user)
 
+	out = False
 	if doc.roles:
+		roles = frappe.get_roles(user)
 		allowed = [d.role for d in doc.roles]
 		if has_common(roles, allowed):
-			return True
-	elif doc.chart_type == "Report":
-		if doc.report_name in get_allowed_report_names():
-			return True
+			out = True
 	else:
-		allowed_doctypes = frappe.permissions.get_doctypes_with_read()
-		if doc.document_type in allowed_doctypes:
-			return True
+		conditions = get_permission_query_conditions(user)
+		# nosemgrep: frappe-semgrep-rules.rules.frappe-using-db-sql
+		result = frappe.db.sql(
+			f"""
+			SELECT name FROM `tabDashboard Chart`
+			WHERE name='{doc.name}' AND {conditions}
+			""",
+			as_dict=False,
+		)
+		out = bool(len(result))
 
-	return False
+	frappe.cache.set_value(func_key, out, expires_in_sec=120, user=user)
+	return out
 
 
 @frappe.whitelist()
