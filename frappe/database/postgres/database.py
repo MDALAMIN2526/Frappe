@@ -142,7 +142,7 @@ class PostgresDatabase(PostgresExceptionUtil, Database):
 			"Markdown Editor": ("text", ""),
 			"HTML Editor": ("text", ""),
 			"Date": ("date", ""),
-			"Datetime": ("timestamp", None),
+			"Datetime": ("timestamp", "6"),
 			"Time": ("time", "6"),
 			"Text": ("text", ""),
 			"Data": ("varchar", self.VARCHAR_LEN),
