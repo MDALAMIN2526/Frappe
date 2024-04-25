@@ -221,19 +221,18 @@ def get_user_pages_or_reports(parent, cache=False):
 		frappe.qb.from_(hasRole).select(Count("*")).where(hasRole.parent == parentTable.name)
 	)
 
-	# pages with no role are allowed
-	if parent == "Page":
-		pages_with_no_roles = (
-			frappe.qb.from_(parentTable)
-			.select(parentTable.name, parentTable.modified, *columns)
-			.where(no_of_roles == 0)
-		).run(as_dict=True)
+	# pages and reports with no role are allowed
+	pages_with_no_roles = (
+		frappe.qb.from_(parentTable)
+		.select(parentTable.name, parentTable.modified, *columns)
+		.where(no_of_roles == 0)
+	).run(as_dict=True)
 
-		for p in pages_with_no_roles:
-			if p.name not in has_role:
-				has_role[p.name] = {"modified": p.modified, "title": p.title}
+	for p in pages_with_no_roles:
+		if p.name not in has_role:
+			has_role[p.name] = {"modified": p.modified, "title": p.title, "ref_doctype": p.ref_doctype}
 
-	elif parent == "Report":
+	if parent == "Report":
 		if not has_permission("Report", print_logs=False):
 			return {}
 
